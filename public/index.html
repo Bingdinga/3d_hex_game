@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>3D Hex Grid Space</title>
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Import map for Three.js modules -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.156.1/examples/jsm/"
+    }
+  }
+  </script>
+
+  <!-- Socket.io client (keep as regular script, it's not a module) -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+
+<body>
+  <div id="game-container">
+    <div id="canvas-container"></div>
+
+    <div id="ui-overlay">
+      <!-- Room info panel -->
+      <div id="room-panel">
+        <div id="room-info">
+          <span id="room-code-display">Not in a room</span>
+          <button id="copy-room-code" disabled>Copy</button>
+        </div>
+        <div id="room-controls">
+          <button id="create-room-btn">Create Room</button>
+          <div id="join-room-controls">
+            <input type="text" id="room-code-input" placeholder="Room Code">
+            <button id="join-room-btn">Join</button>
+          </div>
+        </div>
+        <div class="control-hint">
+          <span class="key-command">T</span> Terrain
+          <span class="key-command">Shift+T</span> Color
+          <span class="key-command">H</span> Help
+        </div>
+      </div>
+
+      <!-- Chat interface -->
+      <div id="chat-container" class="collapsed">
+        <div id="chat-header">
+          <span>Chat</span>
+          <button id="toggle-chat-btn">▼</button>
+        </div>
+        <div id="chat-messages"></div>
+        <div id="chat-input-area">
+          <input type="text" id="chat-input" placeholder="Type a message...">
+          <button id="send-chat-btn">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Load our main JavaScript module - it will import the others -->
+    <script type="module" src="js/main.js"></script>
+</body>
+
+</html>

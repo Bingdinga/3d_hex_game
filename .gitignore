@@ -1,0 +1,50 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build output
+dist/
+build/
+
+# Debug logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Raspberry Pi specific
+*.img
+
+# Ignore 3D model files to save repository space
+public/models/*.glb
+public/models/*.gltf
+public/models/*.fbx
+public/models/*.obj
+
+# Texture files
+public/textures/*.png
+public/textures/*.jpg
+public/textures/*.jpeg
+public/textures/*.gif
+public/textures/*.webp
