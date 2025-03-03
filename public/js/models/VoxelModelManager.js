@@ -38,6 +38,8 @@ class VoxelModelManager {
    * @param {string} modelPath - Path to the model file
    * @returns {Promise} Promise that resolves with the loaded model
    */
+  // In VoxelModelManager.js, find the loadModel method
+
   loadModel(modelPath) {
     // Check if model is already in cache
     if (this.modelCache[modelPath]) {
@@ -64,24 +66,16 @@ class VoxelModelManager {
         (gltf) => {
           console.log(`Model ${modelPath} loaded successfully (first time)`);
 
-          // Store the original model in cache
           this.modelCache[modelPath] = gltf.scene;
 
           // Store animation clips in the model's userData for future cloning
           if (gltf.animations && gltf.animations.length > 0) {
-            console.log(`Found ${gltf.animations.length} animations in ${modelPath}:`);
-            gltf.animations.forEach((clip, index) => {
-              console.log(`  ${index}: "${clip.name}" (duration: ${clip.duration.toFixed(2)}s)`);
-            });
-
             this.modelCache[modelPath].userData.animations = gltf.animations;
-          } else {
-            console.log(`No animations found in ${modelPath}`);
           }
 
-          // Resolve with a clone and animation data
+          // Resolve with a NEW clone and animation data
           resolve({
-            model: gltf.scene.clone(),
+            model: gltf.scene.clone(), // Use a fresh clone to avoid duplicates
             isFirstLoad: true,
             animations: gltf.animations || []
           });
@@ -134,133 +128,75 @@ class VoxelModelManager {
    * @param {THREE.Vector3} position - Position to place the model
    * @param {Object} options - Options for the model
    */
+  // Simplify placeModelAt:
   async placeModelAt(hexId, position, options = {}) {
-    console.log(`Placing model at hex ${hexId}`, position, options);
+    console.log(`Placing model at hex ${hexId}`);
 
-    // Check if there's already a pending request for this hex
-    const requestKey = `${hexId}_${options.modelPath || 'fallback'}`;
-    if (this.pendingModelRequests[requestKey]) {
-      console.log(`Skipping duplicate model request for hex ${hexId}`);
-      return this.pendingModelRequests[requestKey];
-    }
-
-    // Remove any existing model on this hex
     this.removeModel(hexId);
 
-    // Create a promise for this request
-    const requestPromise = (async () => {
+    try {
       let model;
-      let animations = []; // Define animations here so it's available throughout the function
 
-      try {
-        if (options.modelPath) {
-          // Get model and first-load flag
-          const loadResult = await this.loadModel(options.modelPath);
-          const loadedModel = loadResult.model;
-          animations = loadResult.animations || []; // Store animations from the result
+      if (options.modelPath) {
+        const loadResult = await this.loadModel(options.modelPath);
+        const loadedModel = loadResult.model;
 
-          model = this.centerModelOrigin(loadedModel);
+        model = this.centerModelOrigin(loadedModel);
 
-          // First, normalize the model size by getting its bounding box
-          const bbox = new THREE.Box3().setFromObject(model);
-          const size = bbox.getSize(new THREE.Vector3());
-          const maxDim = Math.max(size.x, size.y, size.z);
+        const bbox = new THREE.Box3().setFromObject(model);
+        const size = bbox.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
 
-          // Normalize to a base size of 1 unit, then apply the requested scale
-          const normalizedScale = 1 / maxDim;
-          const scale = options.scale || 1.5;
-          model.scale.set(
-            normalizedScale * scale,
-            normalizedScale * scale,
-            normalizedScale * scale
-          );
+        const normalizedScale = 1 / maxDim;
+        const scale = options.scale || 1.5;
+        model.scale.set(
+          normalizedScale * scale,
+          normalizedScale * scale,
+          normalizedScale * scale
+        );
 
-          // Apply position BEFORE adding to scene
-          model.position.copy(position);
+        model.position.copy(position);
 
-          // Apply rotation if specified
-          if (options.rotation) {
-            model.rotation.x = options.rotation.x || 0;
-            model.rotation.y = options.rotation.y || 0;
-            model.rotation.z = options.rotation.z || 0;
-          }
-
-          // Add unique identifier
-          model.userData.hexId = hexId;
-          model.userData.instanceId = Date.now() + Math.random().toString(36).substring(2, 9);
-
-          // Now add to scene after all transforms are applied
-          this.scene.add(model);
-
-          // Force matrix update
-          model.updateMatrix();
-          model.updateMatrixWorld(true);
-        } else {
-          // Use fallback if no model path is specified
-          console.log('Using fallback model (no model path specified)');
-          const material = new THREE.MeshStandardMaterial({
-            color: Math.random() * 0xffffff
-          });
-          model = new THREE.Mesh(this.fallbackGeometry, material);
-
-          // Apply scale directly for fallback cube
-          const scale = options.scale || 1.5;
-          model.scale.set(scale, scale, scale);
+        if (options.rotation) {
+          model.rotation.x = options.rotation.x || 0;
+          model.rotation.y = options.rotation.y || 0;
+          model.rotation.z = options.rotation.z || 0;
         }
 
-        // Add a unique identifier to the model to help with debugging
         model.userData.hexId = hexId;
-        model.userData.instanceId = Date.now() + Math.random().toString(36).substring(2, 9);
 
-        // Store reference
-        this.models[hexId] = model;
+        this.scene.add(model);
+        model.updateMatrix();
+        model.updateMatrixWorld(true);
+      } else {
+        // Use fallback if no model path is specified
+        const material = new THREE.MeshStandardMaterial({
+          color: Math.random() * 0xffffff
+        });
+        model = new THREE.Mesh(this.fallbackGeometry, material);
 
-        // Set up animations if available
-        if (animations && animations.length > 0) {
-          // Store available animation clips for this model
-          this.animationClips[hexId] = animations;
-
-          // Create a mixer for this model
-          const mixer = new THREE.AnimationMixer(model);
-          this.animationMixers[hexId] = mixer;
-
-          // Log available animations
-          console.log(`Model at hex ${hexId} has ${animations.length} animations available:`);
-          animations.forEach((clip, index) => {
-            console.log(`  ${index}: "${clip.name}" (duration: ${clip.duration.toFixed(2)}s)`);
-          });
-
-          // Automatically play a random animation if option is set
-          if (options.playAnimation) {
-            this.playRandomAnimation(hexId);
-          }
-        }
-
-        // Store animation parameters if animation is enabled (for hover/rotate animations)
-        if (options.animate) {
-          this.animatedModels[hexId] = {
-            model: model,
-            initialY: position.y,
-            hoverRange: options.hoverRange || 0.2,
-            hoverSpeed: options.hoverSpeed || 1.0,
-            rotateSpeed: options.rotateSpeed || 0.5
-          };
-        }
-
-        console.log(`Model placed at hex ${hexId}, instanceId: ${model.userData.instanceId}`);
-        return model;
-      } catch (error) {
-        console.error('Error placing model:', error);
-        return this.placeFallbackModel(hexId, position, options);
-      } finally {
-        // Remove from pending requests when done
-        delete this.pendingModelRequests[requestKey];
+        const scale = options.scale || 1.5;
+        model.scale.set(scale, scale, scale);
       }
-    })();
 
-    // Store the promise in pending requests
-    this.pendingModelRequests[requestKey] = requestPromise;
-    return requestPromise;
+      model.userData.hexId = hexId;
+      this.models[hexId] = model;
+
+      if (options.animate) {
+        this.animatedModels[hexId] = {
+          model: model,
+          initialY: position.y,
+          hoverRange: options.hoverRange || 0.2,
+          hoverSpeed: options.hoverSpeed || 1.0,
+          rotateSpeed: options.rotateSpeed || 0.5
+        };
+      }
+
+      return model;
+    } catch (error) {
+      console.error('Error placing model:', error);
+      return this.placeFallbackModel(hexId, position, options);
+    }
   }
 
   // In VoxelModelManager.js - Add this new method
@@ -550,7 +486,7 @@ class VoxelModelManager {
    */
   removeModel(hexId) {
     if (this.models[hexId]) {
-      // Remove from scene
+      // Make sure to call scene.remove to remove it from the scene
       this.scene.remove(this.models[hexId]);
 
       // Clean up animation resources
@@ -570,8 +506,6 @@ class VoxelModelManager {
       // Clean up other resources
       delete this.animatedModels[hexId];
       delete this.models[hexId];
-
-      console.log(`Model and animations removed from hex ${hexId}`);
     }
   }
 

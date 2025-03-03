@@ -5,10 +5,10 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // Import your own modules
 import { HexUtils } from './HexUtils.js';
-import { VoxelModelManager } from './VoxelModelManager.js';
+import { VoxelModelManager } from '../models/VoxelModelManager.js';
 import { HexGrid } from './HexGrid.js';
-import { UI } from './UI.js';
-import { SocketManager } from './Socket.js';
+import { UI } from '../ui/UI.js';
+import { SocketManager } from '../networking/Socket.js';
 
 // Make THREE available globally for compatibility
 window.THREE = THREE;
@@ -25,6 +25,10 @@ class App {
       // Initialize Three.js
       this.initThree();
       console.log('Three.js initialized');
+
+      // Initialize controls
+      this.initControls();
+      console.log('Controls initialized');
 
       // Initialize components
       this.ui = new UI();
@@ -55,9 +59,6 @@ class App {
         this.ui.initGameHUD();
       }
 
-      // Prevent default touch behavior (scrolling, pinch-zoom)
-      this.preventDefaultTouchBehavior();
-
       // Animation state
       this.animationsEnabled = true;
 
@@ -76,30 +77,10 @@ class App {
   }
 
   /**
-   * Initialize Three.js scene, camera, renderer, etc.
-   */
-  initThree() {
-    // Create scene
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1a2e);
-
-    // Create camera
-    this.camera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-    this.camera.position.set(0, 15, 20);
-    this.camera.lookAt(0, 0, 0);
-
-    // Create renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    document.getElementById('canvas-container').appendChild(this.renderer.domElement);
-
-    // Initialize controls using imported OrbitControls
+ * Initialize all controls (camera, keyboard, mouse/touch)
+ */
+  initControls() {
+    // 1. CAMERA CONTROLS (from initThree)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.25;
@@ -138,30 +119,16 @@ class App {
       }
     };
 
-    // Add event listeners to track mouse movement for drag detection
-    this.renderer.domElement.addEventListener('mousedown', () => {
-      this.controls.isMouseDown = true;
-      this.controls.lastMoveTime = Date.now();
-    });
+    // 2. KEYBOARD CONTROLS (consolidated from both methods)
+    // Track keyboard state for modifiers
+    this.isShiftKeyPressed = false;
 
-    this.renderer.domElement.addEventListener('mousemove', () => {
-      if (this.controls.isMouseDown) {
-        this.controls.isMouseMoving = true;
-        this.controls.wasDragging = true;
-        this.controls.lastMoveTime = Date.now();
-      }
-    });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Shift') this.isShiftKeyPressed = true;
 
-    window.addEventListener('mouseup', () => {
-      this.controls.isMouseDown = false;
-      this.controls.isMouseMoving = false;
-    });
-
-    // Add this to the keyboard event listeners in preventDefaultTouchBehavior method
-    window.addEventListener('keydown', (event) => {
-      // Generate terrain with 'T' key
-      if (event.key === 't' || event.key === 'T') {
-        if (event.shiftKey) {
+      // Terrain generation with 'T' key
+      if (e.key === 't' || e.key === 'T') {
+        if (e.shiftKey) {
           // Shift+T: Apply random color tints
           this.applyRandomTints();
         } else {
@@ -169,75 +136,47 @@ class App {
           this.generateTerrain();
         }
       }
-    });
 
-    // Add this to the initThree method, near where the other event listeners are defined
-    // Mouse wheel for zoom
-    this.renderer.domElement.addEventListener('wheel', (event) => {
-      // Only proceed if controls are enabled
-      if (!this.controls.enabled) return;
-
-      // Check if a hex is selected (in which case we prioritize height adjustment)
-      if (this.hexGrid && this.hexGrid.selectedHex) {
-        // Let the hex grid handle the scroll event for height adjustment
-        const hexHandled = this.hexGrid.handleScroll(event);
-
-        // Always prevent default and stop propagation when a hex is selected
-        // to avoid camera zooming interference
-        event.preventDefault();
-        event.stopPropagation();
-
-        // Disable OrbitControls zoom temporarily
-        this.controls.enableZoom = false;
-        // console.log('Zoom disabled');
-
-        return;
-      } else {
-        this.controls.enableZoom = true;
-        // console.log('Zoom enabled');
-      }
-
-      // If no hex is selected, let OrbitControls handle the zooming normally
-      // No need to prevent default as OrbitControls will do that
-    }, { passive: false });
-
-    // Add keyboard shortcut for toggling animations (press 'A' key)
-    window.addEventListener('keydown', (event) => {
       // Toggle animations with 'A' key
-      if (event.key === 'a' || event.key === 'A') {
+      if (e.key === 'a' || e.key === 'A') {
         this.toggleAnimations();
       }
-    });
 
-    // In the preventDefaultTouchBehavior method, add this to the existing keyboard event listeners
-    window.addEventListener('keydown', (event) => {
-      // Place one of each model type with Shift+C
-      if ((event.key === 'c' || event.key === 'C') && event.shiftKey) {
-        this.placeAllModelTypes();
+      // Toggle Help HUD with 'H' key
+      if (e.key === 'h' || e.key === 'H') {
+        if (this.ui && this.ui.hudContainer) {
+          this.ui.hudContainer.classList.toggle('hud-hidden');
+        }
       }
     });
 
-    // Add lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    this.scene.add(ambientLight);
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'Shift') this.isShiftKeyPressed = false;
+    });
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 20, 10);
-    this.scene.add(directionalLight);
-
-    // Add axes helper for debugging (X = red, Y = green, Z = blue)
-    this.axesHelper = new THREE.AxesHelper(10); // 10 is the size of the axes
-    this.gridHelper = new THREE.GridHelper(50, 50, 0x555555, 0x333333);
-    this.scene.add(this.axesHelper);
-    this.axesHelper.visible = false; // Hidden by default
-    this.scene.add(this.gridHelper);
-    this.gridHelper.visible = false; // Hidden by default
-
+    // 3. MOUSE/TOUCH CONTROLS (consolidated from both methods)
     // Set up mouse position tracking
     this.mouse = new THREE.Vector2();
+
     window.addEventListener('mousemove', (event) => {
       this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      if (this.controls.isMouseDown) {
+        this.controls.isMouseMoving = true;
+        this.controls.wasDragging = true;
+        this.controls.lastMoveTime = Date.now();
+      }
+    });
+
+    window.addEventListener('mousedown', () => {
+      this.controls.isMouseDown = true;
+      this.controls.lastMoveTime = Date.now();
+    });
+
+    window.addEventListener('mouseup', () => {
+      this.controls.isMouseDown = false;
+      this.controls.isMouseMoving = false;
     });
 
     // Set up touch position tracking for mobile
@@ -284,6 +223,87 @@ class App {
         }
       }
     });
+
+    // Mouse wheel for zoom/height adjustment
+    this.renderer.domElement.addEventListener('wheel', (event) => {
+      // Only proceed if controls are enabled
+      if (!this.controls.enabled) return;
+
+      // Check if a hex is selected (in which case we prioritize height adjustment)
+      if (this.hexGrid && this.hexGrid.selectedHex) {
+        // Let the hex grid handle the scroll event for height adjustment
+        const hexHandled = this.hexGrid.handleScroll(event);
+
+        // Always prevent default and stop propagation when a hex is selected
+        // to avoid camera zooming interference
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Disable OrbitControls zoom temporarily
+        this.controls.enableZoom = false;
+        return;
+      } else {
+        this.controls.enableZoom = true;
+      }
+    }, { passive: false });
+
+    // 4. PREVENT DEFAULT BEHAVIORS
+    // Disable context menu (right-click) for the application
+    document.getElementById('game-container').addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
+    // Prevent scrolling when touching the canvas
+    document.body.addEventListener('touchstart', (e) => {
+      if (e.target === document.querySelector('#canvas-container canvas')) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    document.body.addEventListener('touchmove', (e) => {
+      if (e.target === document.querySelector('#canvas-container canvas')) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    document.body.addEventListener('touchend', (e) => {
+      if (e.target === document.querySelector('#canvas-container canvas')) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+  }
+
+  /**
+   * Initialize Three.js scene, camera, renderer, etc.
+   */
+  initThree() {
+    // Create scene
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x1a1a2e);
+
+    // Create camera
+    this.camera = new THREE.PerspectiveCamera(
+      60,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    );
+    this.camera.position.set(0, 15, 20);
+    this.camera.lookAt(0, 0, 0);
+
+    // Create renderer
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    document.getElementById('canvas-container').appendChild(this.renderer.domElement);
+
+    // Add lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    this.scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 20, 10);
+    this.scene.add(directionalLight);
 
     // Handle window resize
     window.addEventListener('resize', () => {
@@ -410,51 +430,6 @@ class App {
     });
   }
 
-  /**
-   * Prevent default touch behavior to avoid scrolling and zooming
-   */
-  preventDefaultTouchBehavior() {
-    // Prevent scrolling when touching the canvas
-    document.body.addEventListener('touchstart', function (e) {
-      if (e.target === document.querySelector('#canvas-container canvas')) {
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    document.body.addEventListener('touchmove', function (e) {
-      if (e.target === document.querySelector('#canvas-container canvas')) {
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    document.body.addEventListener('touchend', function (e) {
-      if (e.target === document.querySelector('#canvas-container canvas')) {
-        e.preventDefault();
-      }
-    }, { passive: false });
-
-    // Track keyboard state for modifiers
-    this.isShiftKeyPressed = false;
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'Shift') this.isShiftKeyPressed = true;
-    });
-    window.addEventListener('keyup', (e) => {
-      if (e.key === 'Shift') this.isShiftKeyPressed = false;
-    });
-
-    // Add keyboard shortcut for toggling axes helper (press 'X' key)
-    window.addEventListener('keydown', (event) => {
-      // Toggle axes helper with 'X' key
-      if (event.key === 'x' || event.key === 'X') {
-        this.toggleAxesHelper();
-      }
-    });
-
-    // Disable context menu (right-click) for the application
-    document.getElementById('game-container').addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-    });
-  }
 
   /**
    * Handle hex click and notify server
@@ -483,25 +458,6 @@ class App {
         hexMesh.material.color &&
         hexMesh.material.color.getHex() !== this.hexGrid.defaultMaterial.color.getHex();
 
-      // Only set color if it doesn't already have a custom color
-      if (!hasCustomColor) {
-        // Get current height - maintain it instead of resetting to 1.0
-        const currentHeight = hexMesh.userData.height || 1.0;
-
-        // Generate a random color
-        const action = {
-          color: this.getRandomColor(),
-          height: currentHeight // Maintain the current height
-        };
-
-        // Send action to server
-        this.socketManager.sendHexAction(
-          this.currentRoomCode,
-          selectedHex.hexId,
-          action
-        );
-      }
-
       // Play animation on the model if there is one on this hex
       // Add this code to trigger animation
       if (this.hexGrid && typeof this.hexGrid.playAnimationOnHex === 'function') {
@@ -512,180 +468,30 @@ class App {
   }
 
   /**
- * Place one of each available model type on random hexes
- */
-  placeAllModelTypes() {
-    // Only proceed if we're in a room and have the model manager
-    if (!this.currentRoomCode || !this.socketManager ||
-      !this.hexGrid || !this.hexGrid.voxelModelManager) {
-      console.warn('Cannot place models: not in a room or model manager not available');
-      if (this.ui && typeof this.ui.showToast === 'function') {
-        this.ui.showToast('Join a room first to place models', 'error');
-      }
-      return;
-    }
-
-    // Get all available models
-    const availableModels = this.hexGrid.voxelModelManager.availableModels;
-    if (!availableModels || availableModels.length === 0) {
-      this.ui.showToast('No models available. Try refreshing models first.', 'error');
-      return;
-    }
-
-    // Get all hex IDs
-    const hexIds = Object.keys(this.hexGrid.hexMeshes);
-    if (hexIds.length === 0) {
-      this.ui.showToast('No hexes available on the grid', 'error');
-      return;
-    }
-
-    this.ui.showToast(`Placing ${availableModels.length} different models...`, 'success');
-    console.log(`Placing ${availableModels.length} models on random hexes`);
-
-    // Process models in batches to avoid freezing the UI
-    const batchSize = 3;
-    const placeModelBatch = (startIndex) => {
-      const endIndex = Math.min(startIndex + batchSize, availableModels.length);
-
-      for (let i = startIndex; i < endIndex; i++) {
-        const modelType = availableModels[i];
-
-        // Get a random hex that doesn't already have a model
-        let attempts = 0;
-        let randomHexId;
-
-        do {
-          const randomIndex = Math.floor(Math.random() * hexIds.length);
-          randomHexId = hexIds[randomIndex];
-          attempts++;
-        } while (this.hexGrid.voxelModels[randomHexId] && attempts < 50);
-
-        if (attempts >= 50) {
-          console.warn(`Couldn't find an empty hex after 50 attempts for model ${modelType}`);
-          continue;
-        }
-
-        // Create animation parameters
-        const modelOptions = {
-          modelType: modelType,
-          heightOffset: 1.0,
-          scale: 1.5 + Math.random() * 0.5,
-          rotation: {
-            x: 0,
-            y: Math.random() * Math.PI * 2,
-            z: 0
-          },
-          animate: true,
-          hoverRange: 0.1 + Math.random() * 0.15,
-          hoverSpeed: 0.8 + Math.random() * 1.0,
-          rotateSpeed: 0.2 + Math.random() * 0.6,
-          playAnimation: true
-        };
-
-        // Place the model on the hex
-        this.hexGrid.spawnVoxelModelOnHex(randomHexId, modelOptions);
-
-        // Sync with other clients via socket
-        const action = {
-          voxelModel: {
-            type: modelOptions.modelType,
-            scale: modelOptions.scale,
-            rotation: modelOptions.rotation,
-            animate: modelOptions.animate,
-            hoverRange: modelOptions.hoverRange,
-            hoverSpeed: modelOptions.hoverSpeed,
-            rotateSpeed: modelOptions.rotateSpeed
-          }
-        };
-
-        this.socketManager.sendHexAction(
-          this.currentRoomCode,
-          randomHexId,
-          action
-        );
-
-        // Schedule animation to play for 7 seconds after a slight delay
-        setTimeout(() => {
-          this.playExtendedAnimation(randomHexId, 7);
-        }, i * 200); // Stagger the animation starts
-      }
-
-      // Process next batch if there are more models
-      if (endIndex < availableModels.length) {
-        setTimeout(() => placeModelBatch(endIndex), 300);
-      }
-    };
-
-    // Start placing models in batches
-    placeModelBatch(0);
-  }
-
-  /**
- * Play an animation on a model for a specified duration
- * @param {string} hexId - ID of the hex with the model
- * @param {number} duration - Duration in seconds
- */
-  playExtendedAnimation(hexId, duration = 7) {
-    if (this.hexGrid &&
-      this.hexGrid.voxelModelManager &&
-      this.hexGrid.voxelModelManager.animationClips[hexId]) {
-
-      // Play a random animation for the specified duration
-      const result = this.hexGrid.voxelModelManager.playRandomAnimation(hexId, duration);
-
-      if (result) {
-        console.log(`Started ${duration}-second animation on hex ${hexId}`);
-      }
-    }
-  }
-
-  /**
    * Handle placing a voxel model on a hex
    * @param {string} hexId - ID of the clicked hex
    */
   // Update this method in main.js
   handleVoxelModelPlacement(hexId) {
-    // Only place models if we're in a room
     if (!this.currentRoomCode) return;
 
-    // Check if the hex exists
     const hexMesh = this.hexGrid.hexMeshes[hexId];
     if (!hexMesh) return;
 
-    // Get a random model type from the available models
     const randomModelType = this.hexGrid.voxelModelManager.getRandomModelType();
 
-    // Create a model selection with animation parameters
     const modelOptions = {
       modelType: randomModelType,
-      heightOffset: 1.0,
-      scale: 1.5 + Math.random() * 0.5, // Random scale between 1.5 and 2.0
-      rotation: {
-        x: 0,
-        y: Math.random() * Math.PI * 2, // Random Y rotation
-        z: 0
-      },
-      animate: true,
-      hoverRange: 0.1 + Math.random() * 0.15, // Random hover range
-      hoverSpeed: 0.8 + Math.random() * 1.0, // Random hover speed
-      rotateSpeed: 0.2 + Math.random() * 0.6, // Random rotation speed
-      playAnimation: true // Add this option to play animation immediately
+      scale: 1.5,
+      animate: true
     };
 
-    // Place the model on the hex
-    this.hexGrid.spawnVoxelModelOnHex(hexId, modelOptions);
-
-    // Sync with other clients via socket
     if (this.socketManager) {
       const action = {
         voxelModel: {
           type: modelOptions.modelType,
           scale: modelOptions.scale,
-          rotation: modelOptions.rotation,
-          animate: modelOptions.animate,
-          hoverRange: modelOptions.hoverRange,
-          hoverSpeed: modelOptions.hoverSpeed,
-          rotateSpeed: modelOptions.rotateSpeed
+          animate: modelOptions.animate
         }
       };
 
@@ -790,18 +596,6 @@ class App {
 
     // Render
     this.renderer.render(this.scene, this.camera);
-  }
-
-  /**
-   * Toggle the visibility of the coordinate axes
-   */
-  toggleAxesHelper() {
-    if (this.axesHelper) {
-      this.axesHelper.visible = !this.axesHelper.visible;
-      console.log(`Axes helper is now ${this.axesHelper.visible ? 'visible' : 'hidden'}`);
-      this.gridHelper.visible = !this.gridHelper.visible;
-      console.log(`Grid helper is now ${this.gridHelper.visible ? 'visible' : 'hidden'}`);
-    }
   }
 
   /**

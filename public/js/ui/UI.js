@@ -121,34 +121,28 @@ class UI {
   }
 
   // Add to the UI constructor after other initialization
+  // Simplify initGameHUD:
   initGameHUD() {
-    // Create HUD container
     this.hudContainer = document.createElement('div');
     this.hudContainer.id = 'game-hud';
     this.hudContainer.className = 'game-hud';
 
-    // Create controls indicator with minimal design
     this.controlsIndicator = document.createElement('div');
     this.controlsIndicator.className = 'hud-panel';
     this.controlsIndicator.innerHTML = `
-      <div class="control-row"><span class="key">T</span> Generate Terrain</div>
-      <div class="control-row"><span class="key">Shift+T</span> Change Colors</div>
-      <div class="control-row"><span class="key">Shift+Click</span> Place Model</div>
-      <div class="control-row"><span class="key">A</span> Toggle Animations</div>
-      <div class="control-row"><span class="key">Scroll</span> Adjust Height</div>
-    `;
+    <div class="control-row"><span class="key">T</span> Generate Terrain</div>
+    <div class="control-row"><span class="key">Shift+T</span> Change Colors</div>
+    <div class="control-row"><span class="key">A</span> Toggle Animations</div>
+    <div class="control-row"><span class="key">Scroll</span> Adjust Height</div>
+  `;
 
     this.hudContainer.appendChild(this.controlsIndicator);
-
-    // Add HUD to the document
     document.getElementById('ui-overlay').appendChild(this.hudContainer);
 
-    // Auto-hide HUD after 8 seconds
     setTimeout(() => {
       this.hudContainer.classList.add('hud-hidden');
     }, 8000);
 
-    // Allow showing/hiding HUD with H key
     window.addEventListener('keydown', (e) => {
       if (e.key === 'h' || e.key === 'H') {
         this.hudContainer.classList.toggle('hud-hidden');

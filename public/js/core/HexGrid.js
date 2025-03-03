@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { HexUtils } from './HexUtils.js';
-import { VoxelModelManager } from './VoxelModelManager.js';
-import { NoiseGenerator } from './NoiseGenerator.js';
+import { VoxelModelManager } from '../models/VoxelModelManager.js';
+import { NoiseGenerator } from '../utils/NoiseGenerator.js';
 
 /**
  * HexGrid class handles creating and managing a hexagonal grid in Three.js
@@ -114,46 +114,33 @@ class HexGrid {
  * @param {string} roomCode - Current room code for syncing
  * @param {SocketManager} socketManager - Socket manager for syncing
  */
-  // In HexGrid.js - modify the generateTerrain method
   generateTerrain(scale = 0.1, amplitude = 3.0, octaves = 4, roomCode, socketManager) {
-    // Skip if we're not in a room or don't have a socket manager
-    if (!roomCode || !socketManager) {
-      console.warn('Cannot generate terrain: not in a room or socket manager not available');
-      return;
-    }
-
-    console.log(`Generating terrain with scale=${scale}, amplitude=${amplitude}, octaves=${octaves}`);
+    if (!roomCode || !socketManager) return;
 
     // Create noise generator with a random seed
     const noiseGen = new NoiseGenerator(Math.random() * 1000);
 
-    // Generate 1-2 random peak locations within grid bounds
-    const peakCount = 1 + Math.floor(Math.random() * 2); // 1 or 2 peaks
+    // Generate peaks
+    const peakCount = 1 + Math.floor(Math.random() * 2);
     const peakPoints = [];
-    const gridRadius = this.radius * 1.5; // Adjust based on your grid size
+    const gridRadius = this.radius * 1.5;
 
     for (let i = 0; i < peakCount; i++) {
-      // Generate peaks within the grid radius, but not at the very center
       const angle = Math.random() * Math.PI * 2;
-      const distance = (0.3 + Math.random() * 0.5) * gridRadius; // Between 30-80% of grid radius
-
+      const distance = (0.3 + Math.random() * 0.5) * gridRadius;
       peakPoints.push({
         x: Math.cos(angle) * distance,
         y: Math.sin(angle) * distance
       });
     }
 
-    // Configure peak parameters
-    const peakHeight = 3.0 + Math.random() * 2.0; // Height between 3-5 units
-    const peakWidth = 3.0 + Math.random() * 2.0; // Width between 3-5 hex units
+    const peakHeight = 3.0 + Math.random() * 2.0;
+    const peakWidth = 3.0 + Math.random() * 2.0;
 
-    console.log(`Added ${peakCount} peaks with height ${peakHeight.toFixed(2)} and width ${peakWidth.toFixed(2)}`);
-
-    // Process all hexes in batches to avoid freezing the UI
+    // Process all hexes in batches
     const hexIds = Object.keys(this.hexMeshes);
     const batchSize = 20;
 
-    // Function to process a batch
     const processBatch = (startIndex) => {
       const endIndex = Math.min(startIndex + batchSize, hexIds.length);
 
@@ -162,25 +149,23 @@ class HexGrid {
         const hex = this.hexMeshes[hexId];
         const { q, r } = hex.userData;
 
-        // Generate base height using noise
+        // Generate height using noise
         const noiseValue = noiseGen.fractalNoise(q * scale, r * scale, octaves);
-
-        // Calculate base height (adding a small minimum height)
         let height = 0.25 + noiseValue * amplitude;
 
-        // Add peak influence (much taller areas)
+        // Add peak influence
         const peakInfluence = noiseGen.createPeaks(q, r, peakPoints, peakHeight, peakWidth);
         height += peakInfluence;
 
-        // Round to nearest 0.25 for cleaner values
+        // Round to nearest 0.25
         const roundedHeight = Math.round(height * 4) / 4;
 
-        // Create action with the height change
+        // Create action with height change
         const action = {
           height: roundedHeight
         };
 
-        // IMPORTANT: Preserve existing color if it exists
+        // Preserve existing color if it exists
         if (hex.userData.customColor) {
           action.color = '#' + hex.userData.customColor.getHexString();
         } else if (hex.material && hex.material[0] && hex.material[0].color) {
@@ -188,11 +173,7 @@ class HexGrid {
         }
 
         // Send to server
-        socketManager.sendHexAction(
-          roomCode,
-          hexId,
-          action
-        );
+        socketManager.sendHexAction(roomCode, hexId, action);
       }
 
       // Process next batch if there are more hexes
@@ -218,45 +199,28 @@ class HexGrid {
  * @param {number} intensity - Tint intensity between 0 and 1
  */
   applyRandomTints(roomCode, socketManager, intensity = 0.7) {
-    // Skip if we're not in a room or don't have a socket manager
-    if (!roomCode || !socketManager) {
-      console.warn('Cannot apply tints: not in a room or socket manager not available');
-      return;
-    }
+    if (!roomCode || !socketManager) return;
+    if (!this.hexMeshes || Object.keys(this.hexMeshes).length === 0) return;
 
-    if (!this.hexMeshes || Object.keys(this.hexMeshes).length === 0) {
-      console.warn('Cannot apply tints: no hexes found in grid');
-      return;
-    }
-
-    // Process all hexes in batches to avoid freezing the UI
-    const hexIds = Object.keys(this.hexMeshes);
-    console.log(`Starting tint application for ${hexIds.length} hexes`);
-
-    // IMPORTANT CHANGE: Generate ONE random color to use for all hexes
-    // Generate a random hue
+    // Generate ONE random color for all hexes
     const hue = Math.random();
-    const saturation = 0.5 + Math.random() * 0.5; // 0.5-1.0
-    const lightness = 0.1 + Math.random() * 0.2; // 0.1-0.3
-
-    // Create a color from HSL
+    const saturation = 0.5 + Math.random() * 0.5;
+    const lightness = 0.1 + Math.random() * 0.2;
     const tintColor = new THREE.Color();
     tintColor.setHSL(hue, saturation, lightness);
 
-    console.log(`Using shared tint color: HSL(${hue.toFixed(2)}, ${saturation.toFixed(2)}, ${lightness.toFixed(2)})`);
-
+    // Process all hexes in batches
+    const hexIds = Object.keys(this.hexMeshes);
     const batchSize = 20;
 
-    // Function to process a batch
     const processBatch = (startIndex) => {
       const endIndex = Math.min(startIndex + batchSize, hexIds.length);
-      console.log(`Processing batch ${startIndex}-${endIndex} of ${hexIds.length} hexes`);
 
       for (let i = startIndex; i < endIndex; i++) {
         const hexId = hexIds[i];
         const hex = this.hexMeshes[hexId];
 
-        // Get current color if it exists
+        // Get current color
         let currentColor;
         if (hex.userData.customColor) {
           currentColor = hex.userData.customColor.clone();
@@ -268,7 +232,7 @@ class HexGrid {
           currentColor = new THREE.Color(0x3498db);
         }
 
-        // Blend the current color with the single tint color based on intensity
+        // Blend the colors
         const blendedColor = new THREE.Color(
           currentColor.r * (1 - intensity) + tintColor.r * intensity,
           currentColor.g * (1 - intensity) + tintColor.g * intensity,
@@ -278,41 +242,31 @@ class HexGrid {
         // Apply color directly to hex
         if (Array.isArray(hex.material)) {
           if (hex.material[0]) {
-            // Top face for extruded hexes
             hex.material[0].color.copy(blendedColor);
           }
         } else if (hex.material) {
-          // Single material case
           hex.material.color.copy(blendedColor);
         }
 
-        // Store the new color in userData
+        // Store the new color
         hex.userData.customColor = blendedColor.clone();
 
-        // Create action with the color change but preserve height
+        // Create action
         const action = {
           color: '#' + blendedColor.getHexString(),
-          // Preserve current height
           height: hex.userData.height
         };
 
         // Send to server
-        socketManager.sendHexAction(
-          roomCode,
-          hexId,
-          action
-        );
+        socketManager.sendHexAction(roomCode, hexId, action);
       }
 
-      // Process next batch if there are more hexes
+      // Process next batch
       if (endIndex < hexIds.length) {
         setTimeout(() => processBatch(endIndex), 50);
-      } else {
-        console.log(`Tint application complete for all ${hexIds.length} hexes`);
       }
     };
 
-    // Start processing batches
     processBatch(0);
   }
 
@@ -593,9 +547,6 @@ class HexGrid {
       }
       this.selectedHex = hex;
 
-      // Add this for debugging marker
-      this.createHexCenterMarker(hex.userData.hexId);
-
       // Return the hex data with preserved height
       return {
         hexId: hex.userData.hexId,
@@ -636,92 +587,50 @@ class HexGrid {
     const hex = this.hexMeshes[hexId];
     if (!hex) return;
 
-    // Keep track if this is the currently selected hex
+    // Keep track of selection state
     const wasSelected = hex === this.selectedHex;
     const wasHover = hex === this.hoverHex;
-
-    // Store current height or use default if not available
-    const currentHeight = hex.userData.height || 0.01;
 
     // Apply color change if specified
     if (state.color) {
       const newColor = new THREE.Color(state.color);
-
-      // Store the color in userData for future reference
       hex.userData.customColor = newColor.clone();
-
 
       // Apply color to materials
       if (Array.isArray(hex.material)) {
-        // For extruded hexes with multiple materials
         hex.material[0].color.copy(newColor);
-
-        // Log for debugging
-        console.log(`Applied color ${state.color} to hex ${hexId} (multi-material)`);
       } else {
-        // For flat hexes with single material
         hex.material.color.copy(newColor);
-
-        // Log for debugging
-        console.log(`Applied color ${state.color} to hex ${hexId} (single material)`);
-      }
-
-      // With our new material setup, we need to handle multi-material objects
-      if (hex.material.length) {
-        // First material is the top face
-        const topMaterial = hex.material[0];
-        topMaterial.color.set(state.color);
-      } else {
-        // For flat hexes or fallbacks
-        const newMaterial = wasSelected ?
-          this.selectedMaterial.clone() :
-          (wasHover ? this.hoverMaterial.clone() : this.defaultMaterial.clone());
-
-        newMaterial.color.set(state.color);
-        hex.material = newMaterial;
       }
     }
 
     // Handle voxel model data if present
     if (state.voxelModel) {
-      // Create model options from incoming data
       const modelOptions = {
         modelType: state.voxelModel.type,
-        heightOffset: 1.0, // Use a consistent height offset
         scale: state.voxelModel.scale || 1.5,
         rotation: state.voxelModel.rotation || { x: 0, y: 0, z: 0 },
         animate: state.voxelModel.animate !== undefined ? state.voxelModel.animate : true,
         hoverRange: state.voxelModel.hoverRange || 0.2,
         hoverSpeed: state.voxelModel.hoverSpeed || 1.0,
         rotateSpeed: state.voxelModel.rotateSpeed || 0.5,
-        hexHeight: hex.userData.height || 0, // Pass current hex height
-        uniqueId: Date.now() + Math.random().toString(36).substring(2, 9) // Ensure we get a fresh instance
+        hexHeight: hex.userData.height || 0
       };
 
-      // Remove any existing model first
       if (this.voxelModelManager) {
         this.voxelModelManager.removeModel(hexId);
       }
 
-      // Create or update the model
       if (modelOptions.modelType) {
         this.spawnVoxelModelOnHex(hexId, modelOptions);
       }
     }
 
-    // Then handle extrusion if height is specified
+    // Handle extrusion if height is specified
     if (state.height !== undefined) {
-      // Store the new height in user data
       hex.userData.height = state.height;
-
-      // Extrude the hex to create a 3D column
       this.extrudeHex(hex, state.height);
-
-      // Update any voxel model that might be on this hex
       this.updateVoxelModel(hexId);
-
-      // Update any sphere that might be on this hex
-      this.updateSpherePosition(hexId);
     }
   }
 
@@ -924,50 +833,37 @@ class HexGrid {
  * @param {Object} options - Options for the model
  * @returns {THREE.Object3D} The model instance
  */
+  // Simplify spawnVoxelModelOnHex:
   spawnVoxelModelOnHex(hexId, options = {}) {
-
-    // Skip if voxel model manager isn't initialized
     if (!this.voxelModelManager) {
       console.warn('Cannot spawn voxel model: voxel model manager not initialized');
       return null;
     }
 
     const hex = this.hexMeshes[hexId];
-    if (!hex) {
-      console.warn(`Cannot spawn voxel model: hex ${hexId} not found`);
-      return null;
-    }
+    if (!hex) return null;
 
-    console.log(`Starting model spawning process for hex ${hexId}`);
-
-    // First, ensure ANY existing model is removed properly
+    // Remove any existing model first
     this.removeVoxelModel(hexId);
 
-    // Default options
+    // Create base options
     const modelOptions = {
-      heightOffset: options.heightOffset || 1.0, // Height above the hex
+      heightOffset: options.heightOffset || 1.0,
       scale: options.scale || 1.5,
-      animate: options.animate !== undefined ? options.animate : true, // Enable animation by default
-      hoverRange: options.hoverRange || 0.2, // Range of up/down hover
-      hoverSpeed: options.hoverSpeed || 1.0, // Speed of hover animation
-      rotateSpeed: options.rotateSpeed || 0.5, // Rotation speed (radians per second)
-      hexHeight: hex.userData.height || 0 // Pass the current hex height
+      animate: options.animate !== undefined ? options.animate : true,
+      hoverRange: options.hoverRange || 0.2,
+      hoverSpeed: options.hoverSpeed || 1.0,
+      rotateSpeed: options.rotateSpeed || 0.5,
+      hexHeight: hex.userData.height || 0
     };
 
-    // In the spawnVoxelModelOnHex method of HexGrid.js
-    // Add a uniqueness parameter to ensure we get a fresh instance
-    modelOptions.uniqueId = Date.now() + Math.random().toString(36).substring(2, 9);
-
-    // If a model type was specified, convert it to a path
+    // Set model path
     if (options.modelType) {
       modelOptions.modelPath = `models/${options.modelType}.glb`;
-      console.log(`Setting model path to: ${modelOptions.modelPath}`);
     } else if (options.modelPath) {
       modelOptions.modelPath = options.modelPath;
-      console.log(`Using provided model path: ${modelOptions.modelPath}`);
     } else {
-      console.warn('No model type or path specified for voxel model');
-      return null; // Don't proceed without a model path
+      return null;
     }
 
     // Add rotation if specified
@@ -990,6 +886,9 @@ class HexGrid {
       hoverSpeed: modelOptions.hoverSpeed,
       rotateSpeed: modelOptions.rotateSpeed
     };
+
+    // Remove any existing model first
+    this.removeVoxelModel(hexId);
 
     // Create the model
     return this.voxelModelManager.placeModelAt(hexId, position, modelOptions);
@@ -1048,84 +947,6 @@ class HexGrid {
     }
   }
 
-  /**
-  * Create a visual marker at the center of a hex for debugging
-  * @param {string} hexId - ID of the hex
-  */
-  createHexCenterMarker(hexId) {
-    const hex = this.hexMeshes[hexId];
-    if (!hex) return;
-
-    // Remove any existing marker
-    if (this.centerMarker) {
-      this.scene.remove(this.centerMarker);
-    }
-
-    // Create a small sphere to mark the hex center
-    const geometry = new THREE.SphereGeometry(0.1, 8, 8);
-    const material = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Red
-    this.centerMarker = new THREE.Mesh(geometry, material);
-
-    // Position at hex center
-    const position = this.hexUtils.getObjectPosition(hex.userData.q, hex.userData.r, 0);
-    this.centerMarker.position.copy(position);
-
-    // Add to scene
-    this.scene.add(this.centerMarker);
-
-    // Log the position for debugging
-    console.log('Hex center position:', {
-      hexId,
-      q: hex.userData.q,
-      r: hex.userData.r,
-      position: position,
-      worldPosition: this.centerMarker.position
-    });
-  }
-
-  /**
-  * Debug method to visualize coordinates and check transformations
-  */
-  debugCoordinates() {
-    // Create arrows showing the coordinate axes at origin
-    const origin = new THREE.Vector3(0, 0, 0);
-
-    // X axis (red)
-    const xDir = new THREE.Vector3(1, 0, 0);
-    const xArrow = new THREE.ArrowHelper(xDir, origin, 2, 0xff0000, 0.2, 0.1);
-    this.scene.add(xArrow);
-
-    // Y axis (green)
-    const yDir = new THREE.Vector3(0, 1, 0);
-    const yArrow = new THREE.ArrowHelper(yDir, origin, 2, 0x00ff00, 0.2, 0.1);
-    this.scene.add(yArrow);
-
-    // Z axis (blue)
-    const zDir = new THREE.Vector3(0, 0, 1);
-    const zArrow = new THREE.ArrowHelper(zDir, origin, 2, 0x0000ff, 0.2, 0.1);
-    this.scene.add(zArrow);
-
-    // Add a small sphere at coordinate (1,1) to test the transformation
-    const testCoord = this.hexUtils.axialToPixel(1, 1);
-    console.log('Test coordinate (1,1) transforms to:', testCoord);
-
-    const testSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.2, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffff00 })
-    );
-    testSphere.position.copy(testCoord);
-    this.scene.add(testSphere);
-
-    // Add another sphere with manual negative z
-    const testSphere2 = new THREE.Mesh(
-      new THREE.SphereGeometry(0.2, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff00ff })
-    );
-    testSphere2.position.set(testCoord.x, testCoord.y, -testCoord.z);
-    this.scene.add(testSphere2);
-
-    console.log('Debug coordinates visualization added');
-  }
 }
 
 export { HexGrid };
