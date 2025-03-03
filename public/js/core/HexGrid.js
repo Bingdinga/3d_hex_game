@@ -604,6 +604,14 @@ class HexGrid {
       }
     }
 
+    if (state.height !== undefined) {
+      hex.userData.height = state.height;
+      this.extrudeHex(hex, state.height);
+
+      // Update the model position immediately after updating the hex
+      this.updateVoxelModel(hexId);
+    }
+
     // Handle voxel model data if present
     if (state.voxelModel) {
       const modelOptions = {
@@ -624,12 +632,8 @@ class HexGrid {
       if (modelOptions.modelType) {
         this.spawnVoxelModelOnHex(hexId, modelOptions);
       }
-    }
-
-    // Handle extrusion if height is specified
-    if (state.height !== undefined) {
-      hex.userData.height = state.height;
-      this.extrudeHex(hex, state.height);
+    } else if (heightChanged) {
+      // If only height changed but we have an existing model, update its position
       this.updateVoxelModel(hexId);
     }
   }
@@ -731,6 +735,8 @@ class HexGrid {
       this.hoverHex = newMesh;
     }
 
+    this.updateVoxelModelPosition(hexId);
+
     // Ensure models update with the new hex height
     if (this.voxelModels[hexId]) {
       this.updateVoxelModelPosition(hexId);
@@ -738,102 +744,11 @@ class HexGrid {
   }
 
   /**
- * Spawns or updates a sphere above a hexagon
- * @param {string} hexId - ID of the hex to place the sphere above
- * @param {Object} options - Optional properties for the sphere
- */
-  spawnSphereAboveHex(hexId, options = {}) {
-    const hex = this.hexMeshes[hexId];
-    if (!hex) return;
-
-    // Default options
-    const sphereOptions = {
-      radius: options.radius || 0.5,
-      color: options.color || 0xf39c12,
-      height: options.height || 1.5 // Height above the hex
-    };
-
-    // If this hex already has a sphere, remove it first
-    if (this.sphereObjects[hexId]) {
-      this.scene.remove(this.sphereObjects[hexId]);
-    }
-
-    // Create sphere geometry
-    const geometry = new THREE.SphereGeometry(sphereOptions.radius, 16, 16);
-
-    // Create material (clone the default or use a custom color)
-    const material = this.sphereMaterial.clone();
-    if (sphereOptions.color) {
-      material.color.set(sphereOptions.color);
-    }
-
-    // Create mesh
-    const sphere = new THREE.Mesh(geometry, material);
-
-    // Position the sphere
-    const position = this.hexUtils.getObjectPosition(
-      hex.userData.q,
-      hex.userData.r,
-      hex.userData.height + sphereOptions.heightOffset
-    );
-    sphere.position.copy(position);
-
-    // Store the height offset in user data so we can maintain it during updates
-    sphere.userData = {
-      heightOffset: sphereOptions.heightOffset
-    };
-
-    // Position the sphere
-    sphere.position.set(
-      position.x,  // x coordinate from hex position
-      hex.userData.height + sphereOptions.heightOffset, // Fixed height above the hex
-      position.z   // z coordinate from hex position
-    );
-
-    // Add to scene
-    this.scene.add(sphere);
-    console.log('Sphere spawned above hex');
-
-    // Store reference
-    this.sphereObjects[hexId] = sphere;
-
-    return sphere;
-  }
-
-  /**
- * Updates the position of a sphere when its hex changes height
- * @param {string} hexId - ID of the hex
- */
-  updateSpherePosition(hexId) {
-    const sphere = this.sphereObjects[hexId];
-    const hex = this.hexMeshes[hexId];
-
-    if (!sphere || !hex) return;
-
-    // Use the stored height offset to position the sphere
-    const heightOffset = sphere.userData.heightOffset || 2.0;
-
-    // Update the y position to maintain fixed distance above the hex
-    sphere.position.y = hex.userData.height + heightOffset;
-  }
-
-  // Add these methods to the HexGrid class in HexGrid.js
-
-
-
-  /**
-   * Spawn a voxel model on a hex
-   * @param {string} hexId - ID of the hex to place the model on
-   * @param {Object} options - Options for the model
-   * @returns {THREE.Group} The model instance
-   */
-  /**
  * Spawn a voxel model on a hex
  * @param {string} hexId - ID of the hex to place the model on
  * @param {Object} options - Options for the model
  * @returns {THREE.Object3D} The model instance
  */
-  // Simplify spawnVoxelModelOnHex:
   spawnVoxelModelOnHex(hexId, options = {}) {
     if (!this.voxelModelManager) {
       console.warn('Cannot spawn voxel model: voxel model manager not initialized');
@@ -846,15 +761,21 @@ class HexGrid {
     // Remove any existing model first
     this.removeVoxelModel(hexId);
 
+    // Ensure hex height is a number
+    const hexHeight = typeof hex.userData.height === 'number' ? hex.userData.height : 0;
+
+    // Use a consistent height offset
+    const heightOffset = options.heightOffset || 1.0;
+
     // Create base options
     const modelOptions = {
-      heightOffset: options.heightOffset || 1.0,
+      heightOffset: heightOffset,
       scale: options.scale || 1.5,
       animate: options.animate !== undefined ? options.animate : true,
       hoverRange: options.hoverRange || 0.2,
       hoverSpeed: options.hoverSpeed || 1.0,
       rotateSpeed: options.rotateSpeed || 0.5,
-      hexHeight: hex.userData.height || 0
+      hexHeight: hexHeight  // Make sure this is set correctly
     };
 
     // Set model path
@@ -871,27 +792,30 @@ class HexGrid {
       modelOptions.rotation = options.rotation;
     }
 
-    // Calculate position
+    // Calculate base position (without the offset)
     const position = this.hexUtils.getObjectPosition(
       hex.userData.q,
       hex.userData.r,
-      hex.userData.height + modelOptions.heightOffset
+      hexHeight // Don't add offset here
     );
 
-    // Store the height offset in user data for position updates
+    // Store the model data including height offset for position updates
     this.voxelModels[hexId] = {
-      heightOffset: modelOptions.heightOffset,
+      heightOffset: heightOffset,
       animate: modelOptions.animate,
       hoverRange: modelOptions.hoverRange,
       hoverSpeed: modelOptions.hoverSpeed,
-      rotateSpeed: modelOptions.rotateSpeed
+      rotateSpeed: modelOptions.rotateSpeed,
+      hexHeight: hexHeight
     };
 
-    // Remove any existing model first
-    this.removeVoxelModel(hexId);
+    // Create the model with explicit y-position
+    const positionWithOffset = position.clone();
+    positionWithOffset.y = position.y + heightOffset;
 
-    // Create the model
-    return this.voxelModelManager.placeModelAt(hexId, position, modelOptions);
+    console.log(`Spawning model at hex ${hexId} with height ${hexHeight} and offset ${heightOffset}`);
+
+    return this.voxelModelManager.placeModelAt(hexId, positionWithOffset, modelOptions);
   }
 
   /**
@@ -908,16 +832,22 @@ class HexGrid {
     // Get the stored height offset
     const heightOffset = this.voxelModels[hexId].heightOffset || 0.5;
 
-    // Calculate new position
+    // Ensure the hex height is a number and not undefined
+    const hexHeight = typeof hex.userData.height === 'number' ? hex.userData.height : 0;
+
+    // Calculate new position - use the hex utils to get the correct world position
     const position = this.hexUtils.getObjectPosition(
       hex.userData.q,
       hex.userData.r,
-      hex.userData.height + heightOffset
+      hexHeight // Don't add offset here, we'll handle that in updateModelHeight
     );
 
-    // Update model position
+    // Log for debugging
+    console.log(`Updating model position for hex ${hexId}. Hex height: ${hexHeight}, Offset: ${heightOffset}`);
+
+    // Update model position with both position and height information
     if (this.voxelModelManager) {
-      this.voxelModelManager.updateModelHeight(hexId, position, hex.userData.height);
+      this.voxelModelManager.updateModelHeight(hexId, position, hexHeight, heightOffset);
     }
   }
 

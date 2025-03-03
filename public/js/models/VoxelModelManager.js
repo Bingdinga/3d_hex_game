@@ -199,18 +199,36 @@ class VoxelModelManager {
     }
   }
 
-  // In VoxelModelManager.js - Add this new method
-  updateModelHeight(hexId, position, hexHeight) {
+  updateModelHeight(hexId, position, hexHeight, heightOffset) {
     const model = this.models[hexId];
     if (!model) return;
 
+    // Create a new position object with the correct Y value
+    const newPosition = position.clone();
+
+    // Apply the height offset to the y-coordinate
+    newPosition.y = position.y + (heightOffset || 0);
+
     // Update the position
-    model.position.copy(position);
+    model.position.copy(newPosition);
+
+    // For debug
+    console.log(`Model at hex ${hexId} position updated to:`, newPosition);
 
     // Update animation data if this model is animated
     if (this.animatedModels[hexId]) {
-      this.animatedModels[hexId].initialY = position.y;
+      // Store both the base position Y and the actual height for animations
+      this.animatedModels[hexId].initialY = newPosition.y;
       this.animatedModels[hexId].hexHeight = hexHeight;
+      this.animatedModels[hexId].heightOffset = heightOffset || 0;
+
+      // Reset animation timing to avoid jumps
+      if (this.animatedModels[hexId].hoverRange > 0) {
+        // Force position update to ensure smooth transition
+        model.position.y = newPosition.y;
+        model.updateMatrix();
+        model.updateMatrixWorld(true);
+      }
     }
   }
 
