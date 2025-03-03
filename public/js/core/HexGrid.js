@@ -27,6 +27,10 @@ class HexGrid {
       this.radius = Math.min(radius, 8); // Reduce radius on mobile for performance
     }
 
+    this.detailedRadius = Math.min(25000, this.radius); // Detailed area radius (in hex units)
+    this.maxInteractionDistance = this.detailedRadius * this.hexUtils.size; // Max distance for hover effects
+
+
     // Create materials
     this.defaultMaterial = new THREE.MeshLambertMaterial({
       color: 0x3498db,
@@ -407,7 +411,21 @@ class HexGrid {
    * @param {THREE.Camera} camera - Current camera
    * @param {boolean} isDragging - Whether we are currently in a drag operation
    */
+  // Modify handleMouseMove to only use frustum culling without distance checks
   handleMouseMove(pointerPosition, camera, isDragging = false) {
+    // Throttle mouse handling (from optimization #1)
+    const now = Date.now();
+    if (!this._lastMouseHandleTime || now - this._lastMouseHandleTime > 30) {
+      this._lastMouseHandleTime = now;
+    } else {
+      // Skip this frame's mouse handling if we just handled recently
+      return this.hoverHex ? {
+        hexId: this.hoverHex.userData.hexId,
+        q: this.hoverHex.userData.q,
+        r: this.hoverHex.userData.r
+      } : null;
+    }
+
     // Skip hover effects completely for mobile devices and during dragging
     if (this.detectMobile() || isDragging) {
       // Clear any existing hover state
@@ -426,9 +444,21 @@ class HexGrid {
 
     this.raycaster.setFromCamera(pointerPosition, camera);
 
-    // Find intersections
-    const intersects = this.raycaster.intersectObjects(Object.values(this.hexMeshes));
+    // Create a filtered list of hexes for raycasting - only use frustum culling
+    const objectsToTest = [];
+    for (const hexId in this.hexMeshes) {
+      const hex = this.hexMeshes[hexId];
 
+      // Only include hexes that are in the camera frustum
+      if (this._isInCameraFrustum(hex, camera)) {
+        objectsToTest.push(hex);
+      }
+    }
+
+    // Find intersections with the filtered objects
+    const intersects = this.raycaster.intersectObjects(objectsToTest);
+
+    // Rest of the function remains the same as your original code
     // Clear previous hover (but not if it's the selected hex)
     if (this.hoverHex && this.hoverHex !== this.selectedHex) {
       if (Array.isArray(this.hoverHex.material)) {
@@ -481,6 +511,19 @@ class HexGrid {
 
     this.hoverHex = null;
     return null;
+  }
+
+  // Add this helper method to HexGrid if not already added
+  _isInCameraFrustum(object, camera) {
+    // Simple bounding sphere test
+    const pos = object.position;
+    const viewPos = new THREE.Vector3(pos.x, pos.y, pos.z);
+    viewPos.project(camera);
+
+    // If coordinates are all between -1.2 and 1.2, it's possibly visible
+    // Using 1.2 instead of 1.0 to avoid objects popping at screen edges
+    return (viewPos.x > -1.2 && viewPos.x < 1.2 &&
+      viewPos.y > -1.2 && viewPos.y < 1.2);
   }
 
   /**
@@ -632,9 +675,6 @@ class HexGrid {
       if (modelOptions.modelType) {
         this.spawnVoxelModelOnHex(hexId, modelOptions);
       }
-    } else if (heightChanged) {
-      // If only height changed but we have an existing model, update its position
-      this.updateVoxelModel(hexId);
     }
   }
 
