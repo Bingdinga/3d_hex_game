@@ -136,6 +136,15 @@ class App {
           this.generateTerrain();
         }
       }
+      // Shift+O: Shift orbital center to selected hex or back to origin
+      window.addEventListener('keydown', (e) => {
+        // Existing key handlers...
+
+        // Shift+O: Shift orbital center to selected hex or back to origin
+        if ((e.key === 'o' || e.key === 'O') && e.shiftKey) {
+          this.shiftOrbitalCenter();
+        }
+      });
 
       // Toggle animations with 'A' key
       if (e.key === 'a' || e.key === 'A') {
@@ -466,6 +475,81 @@ class App {
 
     }
   }
+
+  /**
+ * Shift the orbital center to the selected hex or back to origin
+ */
+  /**
+ * Shift the orbital center to the selected hex or back to origin
+ * @param {boolean} animate - Whether to animate the transition
+ */
+shiftOrbitalCenter(animate = true) {
+  // Store the current target
+  const currentTarget = this.controls.target.clone();
+  let newTarget;
+  let message;
+  
+  // Check if we have a selected hex
+  if (this.hexGrid && this.hexGrid.selectedHex) {
+    // Get the position of the selected hex
+    const { q, r } = this.hexGrid.selectedHex.userData;
+    const position = this.hexGrid.hexUtils.axialToPixel(q, r);
+    
+    newTarget = new THREE.Vector3(position.x, 0, -position.z);
+    // message = `Camera focused on hex (${q},${r})`;
+  } else {
+    // If no hex is selected, reset to origin
+    newTarget = new THREE.Vector3(0, 0, 0);
+    // message = 'Camera reset to center';
+  }
+  
+  if (animate) {
+    // Animate the transition over time
+    const duration = 1000; // in milliseconds
+    const startTime = Date.now();
+    
+    const animateTransition = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Use easing function for smoother animation
+      const easeProgress = progress < 0.5 ? 
+        2 * progress * progress : 
+        -1 + (4 - 2 * progress) * progress;
+      
+      // Interpolate between current and new target
+      this.controls.target.lerpVectors(
+        currentTarget,
+        newTarget,
+        easeProgress
+      );
+      
+      this.controls.update();
+      
+      // Continue animation if not complete
+      if (progress < 1) {
+        requestAnimationFrame(animateTransition);
+      } else {
+        // Show toast when animation completes
+        if (this.ui && typeof this.ui.showToast === 'function') {
+          // this.ui.showToast(message, 'success');
+        }
+      }
+    };
+    
+    // Start animation
+    animateTransition();
+  } else {
+    // Instant transition
+    this.controls.target.copy(newTarget);
+    this.controls.update();
+    
+    // Show toast
+    if (this.ui && typeof this.ui.showToast === 'function') {
+      // this.ui.showToast(message, 'success');
+    }
+  }
+}
 
   /**
    * Handle placing a voxel model on a hex

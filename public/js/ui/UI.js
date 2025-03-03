@@ -134,6 +134,7 @@ class UI {
     <div class="control-row"><span class="key">Shift+T</span> Change Colors</div>
     <div class="control-row"><span class="key">A</span> Toggle Animations</div>
     <div class="control-row"><span class="key">Scroll</span> Adjust Height</div>
+    <div class="control-row"><span class="key">Shift+O</span> Focus Camera</div>
   `;
 
     this.hudContainer.appendChild(this.controlsIndicator);

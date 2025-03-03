@@ -30,6 +30,7 @@
 - **Selecting hexagons**: Left-click on a hexagon to interact with it
 - **Rotating/panning the view**: Right-click and drag to rotate the camera
 - **Zooming**: Use the mouse wheel to zoom in and out
+- **Focus camera**: Press 'Shift+O' to focus the camera on the selected hex, or reset to center if no hex is selected
 
 #### Mobile Controls
 - **Selecting hexagons**: Tap on a hexagon (a clean tap, not a drag)
