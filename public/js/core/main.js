@@ -10,6 +10,8 @@ import { HexGrid } from './HexGrid.js';
 import { UI } from '../ui/UI.js';
 import { SocketManager } from '../networking/Socket.js';
 
+import { FPSCounter } from '../utils/FPSCounter.js';
+
 // Make THREE available globally for compatibility
 window.THREE = THREE;
 window.GLTFLoader = GLTFLoader;
@@ -40,6 +42,10 @@ class App {
       // Initialize hex grid
       this.hexGrid = new HexGrid(this.scene, 1, 17);
       console.log('Hex grid initialized');
+
+      // In the App constructor after other initializations
+      this.fpsCounter = new FPSCounter();
+      console.log('FPS counter initialized');
 
       // Connect components
       this.connectComponents();
@@ -144,6 +150,23 @@ class App {
         if ((e.key === 'o' || e.key === 'O') && e.shiftKey) {
           this.shiftOrbitalCenter();
         }
+      });
+
+      // Add this to your existing keydown event listener in initControls
+      window.addEventListener('keyup', (e) => {
+        if (e.key === 'Shift') this.isShiftKeyPressed = true;
+
+        // Existing key handlers...
+
+        // Toggle FPS counter with 'F' key
+        if (e.key === 'f' || e.key === 'F') {
+          const isVisible = this.fpsCounter.toggle();
+          if (this.ui && typeof this.ui.showToast === 'function') {
+            this.ui.showToast(`FPS Counter ${isVisible ? 'enabled' : 'disabled'}`, 'info');
+          }
+        }
+
+        // Other existing key handlers...
       });
 
       // Toggle animations with 'A' key
@@ -483,73 +506,73 @@ class App {
  * Shift the orbital center to the selected hex or back to origin
  * @param {boolean} animate - Whether to animate the transition
  */
-shiftOrbitalCenter(animate = true) {
-  // Store the current target
-  const currentTarget = this.controls.target.clone();
-  let newTarget;
-  let message;
-  
-  // Check if we have a selected hex
-  if (this.hexGrid && this.hexGrid.selectedHex) {
-    // Get the position of the selected hex
-    const { q, r } = this.hexGrid.selectedHex.userData;
-    const position = this.hexGrid.hexUtils.axialToPixel(q, r);
-    
-    newTarget = new THREE.Vector3(position.x, 0, -position.z);
-    // message = `Camera focused on hex (${q},${r})`;
-  } else {
-    // If no hex is selected, reset to origin
-    newTarget = new THREE.Vector3(0, 0, 0);
-    // message = 'Camera reset to center';
-  }
-  
-  if (animate) {
-    // Animate the transition over time
-    const duration = 1000; // in milliseconds
-    const startTime = Date.now();
-    
-    const animateTransition = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      // Use easing function for smoother animation
-      const easeProgress = progress < 0.5 ? 
-        2 * progress * progress : 
-        -1 + (4 - 2 * progress) * progress;
-      
-      // Interpolate between current and new target
-      this.controls.target.lerpVectors(
-        currentTarget,
-        newTarget,
-        easeProgress
-      );
-      
-      this.controls.update();
-      
-      // Continue animation if not complete
-      if (progress < 1) {
-        requestAnimationFrame(animateTransition);
-      } else {
-        // Show toast when animation completes
-        if (this.ui && typeof this.ui.showToast === 'function') {
-          // this.ui.showToast(message, 'success');
+  shiftOrbitalCenter(animate = true) {
+    // Store the current target
+    const currentTarget = this.controls.target.clone();
+    let newTarget;
+    let message;
+
+    // Check if we have a selected hex
+    if (this.hexGrid && this.hexGrid.selectedHex) {
+      // Get the position of the selected hex
+      const { q, r } = this.hexGrid.selectedHex.userData;
+      const position = this.hexGrid.hexUtils.axialToPixel(q, r);
+
+      newTarget = new THREE.Vector3(position.x, 0, -position.z);
+      // message = `Camera focused on hex (${q},${r})`;
+    } else {
+      // If no hex is selected, reset to origin
+      newTarget = new THREE.Vector3(0, 0, 0);
+      // message = 'Camera reset to center';
+    }
+
+    if (animate) {
+      // Animate the transition over time
+      const duration = 1000; // in milliseconds
+      const startTime = Date.now();
+
+      const animateTransition = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Use easing function for smoother animation
+        const easeProgress = progress < 0.5 ?
+          2 * progress * progress :
+          -1 + (4 - 2 * progress) * progress;
+
+        // Interpolate between current and new target
+        this.controls.target.lerpVectors(
+          currentTarget,
+          newTarget,
+          easeProgress
+        );
+
+        this.controls.update();
+
+        // Continue animation if not complete
+        if (progress < 1) {
+          requestAnimationFrame(animateTransition);
+        } else {
+          // Show toast when animation completes
+          if (this.ui && typeof this.ui.showToast === 'function') {
+            // this.ui.showToast(message, 'success');
+          }
         }
+      };
+
+      // Start animation
+      animateTransition();
+    } else {
+      // Instant transition
+      this.controls.target.copy(newTarget);
+      this.controls.update();
+
+      // Show toast
+      if (this.ui && typeof this.ui.showToast === 'function') {
+        // this.ui.showToast(message, 'success');
       }
-    };
-    
-    // Start animation
-    animateTransition();
-  } else {
-    // Instant transition
-    this.controls.target.copy(newTarget);
-    this.controls.update();
-    
-    // Show toast
-    if (this.ui && typeof this.ui.showToast === 'function') {
-      // this.ui.showToast(message, 'success');
     }
   }
-}
 
   /**
    * Handle placing a voxel model on a hex
@@ -662,6 +685,11 @@ shiftOrbitalCenter(animate = true) {
     // Update controls
     if (this.controls && typeof this.controls.update === 'function') {
       this.controls.update();
+    }
+
+    // Update FPS counter
+    if (this.fpsCounter) {
+      this.fpsCounter.update();
     }
 
     // Update model animations if available

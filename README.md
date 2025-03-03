@@ -41,3 +41,5 @@
 - **Toggle animations**: Press 'A' to toggle model animations on/off
 
 - **Apply color tints**: Press Shift+T to apply random color tints to the terrain, T to regenerate
+
+- **Toggle FPS Counter**: Press 'F' to show/hide the frames-per-second counter
