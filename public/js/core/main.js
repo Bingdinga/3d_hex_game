@@ -40,7 +40,7 @@ class App {
       console.log('Socket manager initialized');
 
       // Initialize hex grid
-      this.hexGrid = new HexGrid(this.scene, 1, 17);
+      this.hexGrid = new HexGrid(this.scene, 1, 37);
       console.log('Hex grid initialized');
 
       // In the App constructor after other initializations
@@ -152,23 +152,6 @@ class App {
         }
       });
 
-      // Add this to your existing keydown event listener in initControls
-      window.addEventListener('keyup', (e) => {
-        if (e.key === 'Shift') this.isShiftKeyPressed = true;
-
-        // Existing key handlers...
-
-        // Toggle FPS counter with 'F' key
-        if (e.key === 'f' || e.key === 'F') {
-          const isVisible = this.fpsCounter.toggle();
-          if (this.ui && typeof this.ui.showToast === 'function') {
-            this.ui.showToast(`FPS Counter ${isVisible ? 'enabled' : 'disabled'}`, 'info');
-          }
-        }
-
-        // Other existing key handlers...
-      });
-
       // Toggle animations with 'A' key
       if (e.key === 'a' || e.key === 'A') {
         this.toggleAnimations();
@@ -184,6 +167,18 @@ class App {
 
     window.addEventListener('keyup', (e) => {
       if (e.key === 'Shift') this.isShiftKeyPressed = false;
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'Shift') this.isShiftKeyPressed = false;
+
+      // Toggle FPS counter with 'F' key on keyup to prevent repeat toggling
+      if (e.key === 'f' || e.key === 'F') {
+        const isVisible = this.fpsCounter.toggle();
+        if (this.ui && typeof this.ui.showToast === 'function') {
+          this.ui.showToast(`FPS Counter ${isVisible ? 'enabled' : 'disabled'}`, 'info');
+        }
+      }
     });
 
     // 3. MOUSE/TOUCH CONTROLS (consolidated from both methods)

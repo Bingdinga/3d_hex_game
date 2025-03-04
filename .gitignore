@@ -48,3 +48,6 @@ public/textures/*.jpg
 public/textures/*.jpeg
 public/textures/*.gif
 public/textures/*.webp
+
+# Ignore all of the voxelConversion
+voxelConversionTest/*
