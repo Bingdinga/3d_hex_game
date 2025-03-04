@@ -40,7 +40,7 @@ class App {
       console.log('Socket manager initialized');
 
       // Initialize hex grid
-      this.hexGrid = new HexGrid(this.scene, 1, 37);
+      this.hexGrid = new HexGrid(this.scene, 1, 17);
       console.log('Hex grid initialized');
 
       // In the App constructor after other initializations

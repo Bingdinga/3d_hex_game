@@ -37,10 +37,7 @@ yarn-error.log*
 *.img
 
 # Ignore 3D model files to save repository space
-public/models/*.glb
-public/models/*.gltf
-public/models/*.fbx
-public/models/*.obj
+public/models/
 
 # Texture files
 public/textures/*.png
@@ -50,4 +47,5 @@ public/textures/*.gif
 public/textures/*.webp
 
 # Ignore all of the voxelConversion
-voxelConversionTest/*
+voxelConv/*
+voxelConv/venv/*
